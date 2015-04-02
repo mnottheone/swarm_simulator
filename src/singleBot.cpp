@@ -5,7 +5,7 @@
 #include "gazebo_msgs/ModelState.h"
 #include <gazebo_msgs/GetModelState.h>
 #include <gazebo_msgs/GetWorldProperties.h>
-#define des_x -18
+#define des_x 0
 #define des_y -18
 #define des_o 0
 #define cor_x (getmodelstate.response.pose.position.x - des_x)
@@ -14,29 +14,28 @@
 #define or_y getmodelstate.response.pose.orientation.y
 #define or_z getmodelstate.response.pose.orientation.z
 #define or_w getmodelstate.response.pose.orientation.w 
-#define cor_o normalizeangle((2*acos(or_w)-des_o))
+#define cor_o normalizeangle((2*atan2(or_z,or_w)-des_o))
 #define MIN_BOT_SPEED 1
 #define MAX_BOT_SPEED 10
 #define MIN_BOT_ANG 0.3
 #define MAX_BOT_ANG 1.5
 #define BOT_POINT_THRESH 0.1
-#define lambda 2
-#define beta 0.7
-#define k1 0.5
-#define k2 4
-#define k3 20
+#define k1 2
+#define k2 1
+#define k3 1
 #define pi 3.14159
-#define ticksToCms 1.107 //approximate
+
 
 /**
  * This tutorial demonstrates to move bot along a smooth trajactory between 2 points in Gazebo.
- * Initial point (-12,-12,0) --> Final Position (0,0,0)
+ * Initial point (-12,-12,0) --> Final Position (0,-18,0)
  */
 
 /* Class to convert xyz coordinates to pyd and give v and w */
-double normalizeangle(double theta)
-{
-return (theta-2*pi*floor((theta+pi)/(2*pi)));
+double normalizeangle(double angle) {
+angle = fmod(angle, 2*pi); // (0, 2PI)
+if(angle > pi) angle -= 2*pi; // (-PI, PI)
+return angle;
 }
 class polar_Cordinate
 {
@@ -51,53 +50,33 @@ double k;
 public:
 polar_Cordinate(){}
 void set_values(double a,double b, double c)
-{
+  {
 	p=sqrt(a*a+b*b);
 	y=normalizeangle(atan2(b,a)-c+pi);
-	d=y+c;
+	d=normalizeangle(y+c);
 	v=(k1*p*cos(y));
         if(y==0)
 	  w= k2*y+k1*cos(y)*(y+k3*d);
         else
 	  w= k2*y+k1*sin(y)*cos(y)*(y+k3*d)/y;
-	v_curve=0;
-}
-void vel_profile() // TO KEEP CARVATURE WITHIN SOME RANGE 
-{
- k = ((w/v)>0)?(w/v):(-1)*(w/v); // k = curvature 
-// if curvature in too low increase w and set v to max val.
-if(k<=0.2)
-{
-v_curve=1;
-w=1;
-v=5;
-}
-else if(k>=5)
-{ 
-v_curve=2;
-v=MIN_BOT_SPEED;
-w=1;
-}
-/*// scale curvature by 50.
-k *= 20;
+        v_curve=0;
+   }
+void vel_profile() // TO KEEP CARVATURE WITHIN SOME RANGE //not working 
+  {
+	 k = ((w/v)>0)?(w/v):(-1)*(w/v); // k = curvature 
+	if(k<=0.2)
+	{
+	   v_curve=1;
+	   w=1;
+	   v=5;
+	}
+	else if(k>=5)
+	{ 
+	v_curve=2;
+	v=MIN_BOT_SPEED;
+	w=1;
+	}
 
-v_curve = MAX_BOT_SPEED/(1+beta*pow(fabs(k),lambda));
-if (v_curve < MIN_BOT_SPEED)
-v_curve = MIN_BOT_SPEED;
-v *= ticksToCmS;
-double timeMs = 0.250*rho + 14.0 * sqrt(rho) + 100.0 * fabs(gamma);
-double speed = timeMs/timeLCMs<(prevSpeed/MAX_BOT_LINEAR_VEL_CHANGE)?prevSpeed-MAX_BOT_LINEAR_VEL_CHANGE:prevSpeed+MAX_BOT_LINEAR_VEL_CHANGE;
-// use vcurve as the velocity
-// NOTE: adding vcurve and finalVel code
-// critical condition: if bot close to final point, v_curve = MAX_BOT_SPEED
-if (rho < BOT_POINT_THRESH && finalSpeed > MIN_BOT_SPEED) {
-v_curve = MAX_BOT_SPEED;
- 
-}
-if(v>MAX_BOT_SPEED)v=MAX_BOT_SPEED;
-if(v<MIN_BOT_SPEED)v=MIN_BOT_SPEED;
-if(w>MAX_BOT_ANG)w=MAX_BOT_ANG;
-if(w>MIN_BOT_ANG)w=MIN_BOT_ANG;*/
 }
 
 double get_v() {return v;}
@@ -138,10 +117,9 @@ int main(int argc, char **argv)
     ROS_INFO("(%lf,%lf,%lf) (%lf,%lf,%lf)  ",cor_x,cor_y,cor_o,pol_c.get_p(),pol_c.get_y(),pol_c.get_d());
     
   
-    if(((pol_c.get_p()>0.5||cor_o >0.1)||count<50))
-  {
-    
-     pol_c.vel_profile(); // for velocity profiling
+  if(((pol_c.get_p()>0.5||cor_o >0.1)||count<50))
+  {    
+    // pol_c.vel_profile(); // for velocity profiling
     if(count%20==0) // To decrease the no. of prints 
     ROS_INFO("(case %lf, k=%lf)   (%lf,%lf) ",pol_c.get_vc(),pol_c.get_k(),pol_c.get_v(),pol_c.get_w());
     
